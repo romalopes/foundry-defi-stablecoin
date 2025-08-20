@@ -70,10 +70,10 @@ $ cast --help
 ```
 
 1. Anchor/Pegged (Relative Stability) -> USDR -> $1.00
-   1.1. Chainlink Price feed
+   1. Chainlink Price feed
 2. Set a function to exchange BTC and ETH to USDR
-   2.1. Stability mechanism (Minting): Algorimic (descentralized entity which is going to mint)
-   2.2. You can only mind stablecoin with enouth collateral(ETH & BTC)
+   1. Stability mechanism (Minting): Algorimic (descentralized entity which is going to mint)
+   2. You can only mind stablecoin with enouth collateral(ETH & BTC)
 3. Collateral: Exogenous (Crypto)
-   3.1 ETH
-   3.2 BTC
+   1. ETH
+   2. BTC
