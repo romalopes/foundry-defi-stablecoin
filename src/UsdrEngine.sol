@@ -26,9 +26,11 @@
 pragma solidity ^0.8.19;
 
 import {UsdrCoin} from "src/USDRCoin.sol";
-import {ReentrancyGuard} from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {ReentrancyGuard} from "openzeppelin-contracts/utils/ReentrancyGuard.sol";
+// import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import {ERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import {AggregatorV3Interface} from
+    "chainlink/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /*
  * @title DSCEngine
@@ -58,13 +60,17 @@ contract UsdrEngine is ReentrancyGuard {
     error UsdrEngine_TokenNotAlowed(address);
     error UsdrEngine_ReentrancyGuard_ReentrantCall();
     error UsdrEngine_FailedTransfer(address, address, uint256);
-    error UsdrEngine_HealthFactorIsLessThanOne(uint256);
+    error UsdrEngine_HealthFactorIsLessThanOne(address, uint256);
+    error UsdrEngine_FailedToMintUsdr(address, uint256);
     ////////////////////
     // State Variables
     ////////////////////
 
     uint256 private constant ADDITIONAL_FEE_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50; // 200% overcollateralization
+    uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant MIN_HEALTH_FACTOR = 1;
     /*
      * @dev Mapping of token to price feed
      * @notice This mapping is used to store the price feed for each token
@@ -90,10 +96,11 @@ contract UsdrEngine is ReentrancyGuard {
      * @dev Event emitted when collateral is deposited
      */
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
-
+    event UsdrMinted(address indexed user, uint256 indexed amountUsdr);
     ////////////////////
     // Modifiers
     ////////////////////
+
     modifier moreThanZero(uint256 _amount) {
         if (_amount <= 0) {
             revert UsdrEngine_ErrorAmountMustBeMoreThanZero(_amount);
@@ -187,8 +194,12 @@ contract UsdrEngine is ReentrancyGuard {
     */
     function mintUsdr(uint256 _amountUsdrToMint) external moreThanZero(_amountUsdrToMint) nonReentrant {
         s_usdrMinted[msg.sender] += _amountUsdrToMint;
-        i_Usdr.mint(msg.sender, _amountUsdrToMint);
         _revertIfHealthFactorIsBroken(msg.sender);
+        bool minted = i_Usdr.mint(msg.sender, _amountUsdrToMint);
+        if (!minted) {
+            revert UsdrEngine_FailedToMintUsdr(msg.sender, _amountUsdrToMint);
+        }
+        emit UsdrMinted(msg.sender, _amountUsdrToMint);
     }
 
     // If they have too much Usdr and not enough Collateral, burn the Usdr
@@ -224,15 +235,27 @@ contract UsdrEngine is ReentrancyGuard {
         // return totalUsdrMinted / totalCollateral
         (uint256 totalUsdrMinted, uint256 totalCollateralValueInUsdr) =
             _getAccountInformationTotalUsdrAndCollateral(user);
-        //
+        // (150/100) it is overcollateralised
+        // (100/150) it is undercollateralised and it can be liquidated
+        // return (totalCollateralValueInUsdr / totalUsdrMinted);
+        // $1000 ETH * 50 = 50000 ETH  / 100 = 500
+
+        // $150 ETH / $100 USDR = 1.5
+        // $150 ETH * 50 = $7500 ETH / 100 = (75 / 100) = 0.75 < 1
+
+        // $1000 ETH / $100 USDR = 10
+        // $1000 ETH * 50 = $50000 ETH / 100 = 500 / 100 = 5 > 1
+        uint256 collateralAdjustedByThreshold =
+            (totalCollateralValueInUsdr * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+        return (collateralAdjustedByThreshold * PRECISION) / totalUsdrMinted;
     }
 
     function _revertIfHealthFactorIsBroken(address user) internal view {
         // 1. check if they have enough collateral
         // 2. Revert if they don't have it
-        uint256 healthFactor = getHealthFactor();
-        if (healthFactor < 1) {
-            revert UsdrEngine_HealthFactorIsLessThanOne(healthFactor);
+        uint256 healthFactor = _healthFactor(user);
+        if (healthFactor < MIN_HEALTH_FACTOR) {
+            revert UsdrEngine_HealthFactorIsLessThanOne(user, healthFactor);
         }
     }
 
@@ -263,10 +286,6 @@ contract UsdrEngine is ReentrancyGuard {
         (, int256 price,,,) = priceFeed.latestRoundData();
         // Ex: 1 ETH = $1000
         // return value from ChainLink 1000 * 1e8 (eight decimals)
-        // BTC/USD 0x85355da30ee4b35F4B30759Bd49a1EBE3fc41Bdb. 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
-        // ETH/USD 0x5147eA642CAEF7BD9c1265AadcA78f997AbB9649 0x694AA1769357215DE4FAC081bf1f309aDC325306
-        // LINK/USD 0x76F8C9E423C228E83DCB11d17F0Bd8aEB0Ca01bb 0xc59E3633BAAC79493d908e63626716e204A45EdF
-        // USDC/USD 0xfB6471ACD42c91FF265344Ff73E88353521d099F 0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E
         return ((uint256(price) * ADDITIONAL_FEE_PRECISION) * amount) / PRECISION; //(1000 * 1e8 * 1e10) * 10 * 1e18
     }
 }
