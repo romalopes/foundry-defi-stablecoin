@@ -67,6 +67,8 @@ $ cast <subcommand>
 $ forge --help
 $ anvil --help
 $ cast --help
+$ forge install openzeppelin/openzeppelin-contracts
+$ forge install smartcontractkit/chainlink-brownie-contracts@0.6.1
 ```
 
 1. Anchor/Pegged (Relative Stability) -> USDR -> $1.00
@@ -77,3 +79,6 @@ $ cast --help
 3. Collateral: Exogenous (Crypto)
    1. ETH
    2. BTC
+
+# Price feed addresses
+https://docs.chain.link/data-feeds/price-feeds/addresses?page=1&testnetPage=1
