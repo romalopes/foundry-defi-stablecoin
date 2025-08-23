@@ -6,7 +6,7 @@ import {DeployUsdr} from "script/DeployUsdr.s.sol";
 import {UsdrEngine} from "src/UsdrEngine.sol";
 import {UsdrCoin} from "src/UsdrCoin.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
-import {ERC20Mock} from "openzeppelin-contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "lib/openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
 import {console} from "forge-std/console.sol";
 
 contract UsdrEngineTest is Test {
@@ -28,8 +28,9 @@ contract UsdrEngineTest is Test {
     function setUp() external {
         deployUsdr = new DeployUsdr();
         (usdrCoin, usdrEngine, helperConfig) = deployUsdr.run();
-        (wethUsdPriceFeed, wbtcUsdPriceFeed, wethTokenAddress, wbtcTokenAddress, deployerKey) =  helperConfig.activeNetworkConfig();
-         if (block.chainid == 31337) {
+        (wethUsdPriceFeed, wbtcUsdPriceFeed, wethTokenAddress, wbtcTokenAddress, deployerKey) =
+            helperConfig.activeNetworkConfig();
+        if (block.chainid == 31337) {
             vm.deal(user, STARTING_USER_BALANCE);
             ERC20Mock(wethTokenAddress).mint(user, STARTING_USER_BALANCE);
             ERC20Mock(wbtcTokenAddress).mint(user, STARTING_USER_BALANCE);
@@ -63,7 +64,6 @@ contract UsdrEngineTest is Test {
         // vm.expectRevert(UsdrEngine.UsdrEngine_ErrorAmountMustBeMoreThanZero(AMONT_COLLATERAL).selector);
         vm.expectRevert(abi.encodeWithSelector(UsdrEngine.UsdrEngine_ErrorAmountMustBeMoreThanZero.selector, 0));
         usdrEngine.depositCollateral(wethTokenAddress, 0);
-
     }
 
     function testDepositCollateral() public {
@@ -71,7 +71,5 @@ contract UsdrEngineTest is Test {
         // assertEq(usdrCoin.balanceOf(user), AMOUNT);
         // usdrEngine.depositCollateral(wbtcTokenAddress, AMOUNT);
         // assertEq(usdrCoin.balanceOf(user), 2 * AMOUNT);
-
     }
 }
-

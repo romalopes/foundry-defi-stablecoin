@@ -26,11 +26,11 @@
 pragma solidity ^0.8.19;
 
 import {UsdrCoin} from "src/UsdrCoin.sol";
-import {ReentrancyGuard} from "openzeppelin-contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 // import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-import {ERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {AggregatorV3Interface} from
-    "chainlink/src/v0.8/interfaces/AggregatorV3Interface.sol";
+    "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /*
  * @title DSCEngine
@@ -135,7 +135,8 @@ contract UsdrEngine is ReentrancyGuard {
     ////////////////////
     // Functions
     ///////////////////
-    constructor(address[] memory _tokenAddresses, address[] memory _priceFeedAddresses ) {  //, address _usdrAddress
+    constructor(address[] memory _tokenAddresses, address[] memory _priceFeedAddresses) {
+        //, address _usdrAddress
         // USD Price feeds
         if (_tokenAddresses.length != _priceFeedAddresses.length) {
             revert UsdrEngine_ErrorArrayofAddressesAreDifferent(_tokenAddresses.length, _priceFeedAddresses.length);
@@ -292,5 +293,4 @@ contract UsdrEngine is ReentrancyGuard {
         // return value from ChainLink 1000 * 1e8 (eight decimals)
         return ((uint256(price) * ADDITIONAL_FEE_PRECISION) * amount) / PRECISION; //(1000 * 1e8 * 1e10) * 10 * 1e18
     }
-
 }
