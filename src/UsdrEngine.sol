@@ -25,7 +25,7 @@
 
 pragma solidity ^0.8.19;
 
-import {UsdrCoin} from "src/USDRCoin.sol";
+import {UsdrCoin} from "src/UsdrCoin.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/utils/ReentrancyGuard.sol";
 // import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {ERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
@@ -85,7 +85,7 @@ contract UsdrEngine is ReentrancyGuard {
     mapping(address user => uint256 amountUsdrMinted) private s_usdrMinted;
 
     // Usdr
-    UsdrCoin private immutable i_Usdr;
+    UsdrCoin private i_usdrCoin;
 
     address[] private s_collateralTokens;
 
@@ -135,7 +135,7 @@ contract UsdrEngine is ReentrancyGuard {
     ////////////////////
     // Functions
     ///////////////////
-    constructor(address[] memory _tokenAddresses, address[] memory _priceFeedAddresses, address _UsdrAddress) {
+    constructor(address[] memory _tokenAddresses, address[] memory _priceFeedAddresses ) {  //, address _usdrAddress
         // USD Price feeds
         if (_tokenAddresses.length != _priceFeedAddresses.length) {
             revert UsdrEngine_ErrorArrayofAddressesAreDifferent(_tokenAddresses.length, _priceFeedAddresses.length);
@@ -149,12 +149,16 @@ contract UsdrEngine is ReentrancyGuard {
             // Add the token to the array
             s_collateralTokens.push(_tokenAddresses[i]);
         }
-        i_Usdr = UsdrCoin(_UsdrAddress);
+        i_usdrCoin = new UsdrCoin(address(this));
     }
 
     ////////////////////
     // External Functions
     ////////////////////
+    function getUsdrCoin() public view returns (UsdrCoin) {
+        return UsdrCoin(i_usdrCoin);
+    }
+
     function depositCollateralAndMintUsdr() external {}
 
     /*
@@ -195,7 +199,7 @@ contract UsdrEngine is ReentrancyGuard {
     function mintUsdr(uint256 _amountUsdrToMint) external moreThanZero(_amountUsdrToMint) nonReentrant {
         s_usdrMinted[msg.sender] += _amountUsdrToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
-        bool minted = i_Usdr.mint(msg.sender, _amountUsdrToMint);
+        bool minted = i_usdrCoin.mint(msg.sender, _amountUsdrToMint);
         if (!minted) {
             revert UsdrEngine_FailedToMintUsdr(msg.sender, _amountUsdrToMint);
         }
@@ -288,4 +292,5 @@ contract UsdrEngine is ReentrancyGuard {
         // return value from ChainLink 1000 * 1e8 (eight decimals)
         return ((uint256(price) * ADDITIONAL_FEE_PRECISION) * amount) / PRECISION; //(1000 * 1e8 * 1e10) * 10 * 1e18
     }
+
 }

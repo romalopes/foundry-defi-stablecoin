@@ -67,7 +67,7 @@ contract HelperConfig is Script {
         networkConfig.wethTokenAddress = 0xdd13E55209Fd76AfE204dBda4007C227904f0a81;
         // https://sepolia.etherscan.io/address/0xa035b9e130F2B1AedC733eEFb1C67Ba4c503491F
         networkConfig.wbtcTokenAddress = 0xa035b9e130F2B1AedC733eEFb1C67Ba4c503491F;
-        networkConfig.deployerKey = vm.envUint("SEPOLIA_DEPLOYER_KEY");
+        networkConfig.deployerKey = vm.envUint("ACCOUNT_1_PRIVATE_KEY"); //"SEPOLIA_DEPLOYER_KEY");
 
         return networkConfig;
     }

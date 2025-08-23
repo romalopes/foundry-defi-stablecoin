@@ -15,8 +15,6 @@ contract UsdrCoinTest is Test {
     }
 
     function testMustMintMoreThanZero() public {
-        console.log("Owner is:", dsc.owner());
-        console.logAddress(dsc.owner());
         // vm.prank(dsc.owner);
         vm.startPrank(dsc.owner());
         vm.expectRevert();
@@ -25,16 +23,9 @@ contract UsdrCoinTest is Test {
     }
 
     function testCanBurnLessThanYouHave() public {
-        console.log("Owner is:", dsc.owner());
-        console.logAddress(msg.sender);
         // vm.prank(dsc.owner);
         vm.startPrank(dsc.owner());
-        console.log("\n\n\nbalanceOf:", dsc.balanceOf(address(this)));
         dsc.mint(account, 10);
-        console.log("\n\n\nbalanceOf:", dsc.balanceOf(address(this)));
-        console.log("\nbalanceOfSender:", dsc.balanceOf(msg.sender));
-        console.log("\nbalanceOfdsc.owner():", dsc.balanceOf(dsc.owner()));
-        console.log("\nbalanceOf account:", dsc.balanceOf(account));
         // vm.expectRevert();
         dsc.burnFrom(account, 9);
         vm.stopPrank();
@@ -49,8 +40,6 @@ contract UsdrCoinTest is Test {
     }
 
     function testCantBurnFromOtherAccount() public {
-        console.log("Owner is:", dsc.owner());
-        console.logAddress(dsc.owner());
         // vm.prank(dsc.owner);
         vm.startPrank(dsc.owner());
         dsc.mint(address(this), 10);
@@ -60,8 +49,6 @@ contract UsdrCoinTest is Test {
     }
 
     function testCanBurnMyCoin() public {
-        console.log("Owner is:", dsc.owner());
-        console.logAddress(dsc.owner());
         // vm.prank(dsc.owner);
         vm.startPrank(msg.sender);
         dsc.mint(msg.sender, 10);
