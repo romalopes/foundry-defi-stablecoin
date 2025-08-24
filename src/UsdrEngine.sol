@@ -62,6 +62,9 @@ contract UsdrEngine is ReentrancyGuard {
     error UsdrEngine_FailedTransfer(address, address, uint256);
     error UsdrEngine_HealthFactorIsLessThanOne(address, uint256);
     error UsdrEngine_FailedToMintUsdr(address, uint256);
+    error UsdrEngine_FailedToBurnUsdr(address, uint256);
+    error UsdrEngine_HealthFactorTooHigh(address, uint256);
+    error UsdrEngine_ErrorHealthFactorNotImproved(uint256 startingUserHealthFactor, uint256 endingUserHealthFactor);
     ////////////////////
     // State Variables
     ////////////////////
@@ -69,8 +72,9 @@ contract UsdrEngine is ReentrancyGuard {
     uint256 private constant ADDITIONAL_FEE_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; // 200% overcollateralization
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
     uint256 private constant LIQUIDATION_PRECISION = 100;
-    uint256 private constant MIN_HEALTH_FACTOR = 1;
+    uint256 private constant LIQUIDATION_BONUS = 10;
     /*
      * @dev Mapping of token to price feed
      * @notice This mapping is used to store the price feed for each token
@@ -96,7 +100,11 @@ contract UsdrEngine is ReentrancyGuard {
      * @dev Event emitted when collateral is deposited
      */
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(
+        address indexed redeemCollateralfrom, address indexed redeemCollateralTo, address indexed token, uint256 amount
+    );
     event UsdrMinted(address indexed user, uint256 indexed amountUsdr);
+    event UsdrBurned(address indexed user, address indexed usdrBurned, uint256 amountUsdr);
     ////////////////////
     // Modifiers
     ////////////////////
@@ -160,32 +168,70 @@ contract UsdrEngine is ReentrancyGuard {
         return UsdrCoin(i_usdrCoin);
     }
 
-    function depositCollateralAndMintUsdr() external {}
+    /*
+    * @notice follows CEI(check, effects, interactions)
+    @param: _addressTokenCollateral: The address of the token to deposit the colateral.  Maybe the chainlink address to get the price of BTC,, ETH
+    @param: _amountCollateral: The amount of collateral to deposit
+    */
+    function depositCollateralAndMintUsdr(
+        address _addressTokenCollateral,
+        uint256 _amountCollateral,
+        uint256 _amountUsdrToMind
+    ) external moreThanZero(_amountCollateral) isAllowedToken(_addressTokenCollateral) nonReentrant {
+        depositCollateral(_addressTokenCollateral, _amountCollateral);
+        mintUsdr(_amountUsdrToMind);
+    }
 
     /*
     * @notice follows CEI(check, effects, interactions)
-    @param: _tokenCollateralAddress: The address of the token to deposit the colateral.  Maybe the chainling address to get the price of BTC,, ETH
+    @param: _addressTokenCollateral: The address of the token to deposit the colateral.  Maybe the chainlink address to get the price of BTC,, ETH
     @param: _amountCollateral: The amount of collateral to deposit
     */
-    function depositCollateral(address _tokenCollateralAddress, uint256 _amountCollateral)
-        external
+    function depositCollateral(address _addressTokenCollateral, uint256 _amountCollateral)
+        public
         moreThanZero(_amountCollateral)
-        isAllowedToken(_tokenCollateralAddress)
+        isAllowedToken(_addressTokenCollateral)
         nonReentrant
     {
         // Add the collateral to the user
-        s_collateralDeposited[msg.sender][_tokenCollateralAddress] += _amountCollateral;
-        emit CollateralDeposited(msg.sender, _tokenCollateralAddress, _amountCollateral);
+        s_collateralDeposited[msg.sender][_addressTokenCollateral] += _amountCollateral;
+        emit CollateralDeposited(msg.sender, _addressTokenCollateral, _amountCollateral);
 
-        bool success = ERC20(_tokenCollateralAddress).transferFrom(msg.sender, address(this), _amountCollateral);
+        bool success = ERC20(_addressTokenCollateral).transferFrom(msg.sender, address(this), _amountCollateral);
         if (!success) {
             revert UsdrEngine_FailedTransfer(msg.sender, address(this), _amountCollateral);
         }
     }
 
-    function redeemandCollateralForUsdr() external {}
+    /*
+    notice follows CEI(check, effects, interactions)
+        @param: _addressTokenCollateral: The address of the token to redeem the colateral.
+        @param: _amountCollateral: The amount of collateral to redeem
+        @param: _amountUsdrToBurn: The amount of Usdr to burn
+        @notice This function redeems the collateral and burns the Usdr
+    */
+    function redeemCollateralForUsdr(
+        address _addressTokenCollateral,
+        uint256 _amountCollateral,
+        uint256 _amountUsdrToBurn
+    ) external {
+        burnUsdr(_amountUsdrToBurn);
+        // redeemCollateral already calls _revertIfHealthFactorIsBroken
+        redeemCollateral(_addressTokenCollateral, _amountCollateral);
+    }
 
-    function redeemandCollateral() external {}
+    // If they have too much Usdr and not enough Collateral, redeem the Collateral
+    // To redeem Collateral, the user must have more Usdr than the threshold
+    // 1. health factor > 1 after collateral pulled.
+    // CE I: check, effects, interactions
+    function redeemCollateral(address _addressTokenCollateral, uint256 _amountCollateral)
+        public
+        moreThanZero(_amountCollateral)
+        nonReentrant
+    {
+        _redeemCollateral(_addressTokenCollateral, _amountCollateral, msg.sender, msg.sender);
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     // If they have too much Collateral and not enough Usdr, mint the Usdr
     // 1. Check if colateral value > Usdr value. If so, mint (Price feeds, values, etc)
@@ -197,7 +243,7 @@ contract UsdrEngine is ReentrancyGuard {
     * @notice This function is called when the user wants to mint Usdr
     * @notice They must have more collateral than the threshold
     */
-    function mintUsdr(uint256 _amountUsdrToMint) external moreThanZero(_amountUsdrToMint) nonReentrant {
+    function mintUsdr(uint256 _amountUsdrToMint) public moreThanZero(_amountUsdrToMint) nonReentrant {
         s_usdrMinted[msg.sender] += _amountUsdrToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = i_usdrCoin.mint(msg.sender, _amountUsdrToMint);
@@ -208,16 +254,113 @@ contract UsdrEngine is ReentrancyGuard {
     }
 
     // If they have too much Usdr and not enough Collateral, burn the Usdr
-    function burnUsdr() external {}
+    function burnUsdr(uint256 _amountUsdrToBurn) public {
+        _burnUsdr(msg.sender, msg.sender, _amountUsdrToBurn);
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
-    function liquidate() external {}
+    // backing $75 / $50 usdr
+    // Liquidator takes $75 backing and burns $50 usdr
+    // Liquidate a user.  If anyone is undercollaterised, they will pay you to liquidate them.
+    // // Verify if system is undercollateralised.
+    // function getHealthFactor() public returns (uint256) {}
+    /* 
+    @params: _collateralAddress: The address of the token to redeem the colateral.
+    @params: _user: The user to liquidate who broke te health factor.  Health factor < 1 
+    @params: _amountCollateral: The amount of collateral to redeem
+    @params: _debtToCover: The amount of Usdr to burn _amountUsdrToBurn
+    @notice: This function redeems the collateral and burns the Usdr
+    @notice: This function assumes the protocol will be 200% collaterized.
+    */
+    function liquidate(address _addressTokenCollateral, address _user, uint256 _debtToCover)
+        external
+        // isAllowedToken(collateral)
+        moreThanZero(_debtToCover)
+        nonReentrant
+    {
+        uint256 startingUserHealthFactor = _healthFactor(_user);
+        if (startingUserHealthFactor >= MIN_HEALTH_FACTOR) {
+            revert UsdrEngine_HealthFactorTooHigh(_user, startingUserHealthFactor);
+        }
 
-    // Verify if system is undercollateralised.
-    function getHealthFactor() public returns (uint256) {}
+        // We want to burn their USDR "debt" and take their collateral
+        // Bad user has 75% collateral.  We want to take 50% collateral
+        // Bad user has 75% usdr.  We want to burn 50% usdr
+        // ex: 140 eth deposited as collateral and 100$ usdr minted then recover $100 dolars
+        // $100 usdr == ?? ETH to be redeemed?
+        // _debtToCover == $100
+        // If Eth == $2000.
+        // 100 / 2000 == 0.05
+        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsdr(_addressTokenCollateral, _debtToCover);
+        // Give them 10% bonus for incentiving them to liquidate
+        // So give the liquidator $110 in WETH for $100 in USDR
+        // 0.05 ETH * 0.1 = 0.005 ETH
+        uint256 bonusColateral = (tokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+
+        uint256 totalCollateraltoRedeem = tokenAmountFromDebtCovered + bonusColateral;
+
+        _redeemCollateral(_addressTokenCollateral, totalCollateraltoRedeem, _user, msg.sender);
+
+        _burnUsdr(_user, msg.sender, _debtToCover);
+        uint256 endingUserHealthFactor = _healthFactor(_user);
+        if (endingUserHealthFactor < startingUserHealthFactor) {
+            revert UsdrEngine_ErrorHealthFactorNotImproved(startingUserHealthFactor, endingUserHealthFactor);
+        }
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     ////////////////////
     // Internal and Private Functions
     ////////////////////
+
+    function _calculateHealthFactor(uint256 totalUsdrMinted, uint256 totalCollateralValueInUsdr)
+        private
+        pure
+        returns (uint256)
+    {
+        if (totalUsdrMinted == 0) {
+            return type(uint256).max;
+        }
+        uint256 collateralAdjustedByThreshold =
+            (totalCollateralValueInUsdr * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+        return (collateralAdjustedByThreshold * PRECISION) / totalUsdrMinted;
+    }
+
+    /*
+        @notice follows CEI(check, effects, interactions)
+        @notice This function is called when the user wants to burn Usdr
+        @ params onBehalfOf: The user who is burning Usdr.  Former msg.sender
+        @ params _amountUsdrToBurn: The amount of Usdr to burn
+        @ params usdrFrom: The address of the Usdr contract
+    */
+    function _burnUsdr(address onBehalfOf, address usdrFrom, uint256 _amountUsdrToBurn) private {
+        s_usdrMinted[onBehalfOf] -= _amountUsdrToBurn;
+        _revertIfHealthFactorIsBroken(onBehalfOf);
+        bool sucess = i_usdrCoin.transferFrom(usdrFrom, address(this), _amountUsdrToBurn);
+        if (!sucess) {
+            revert UsdrEngine_FailedTransfer(onBehalfOf, usdrFrom, _amountUsdrToBurn);
+        }
+
+        i_usdrCoin.burn(_amountUsdrToBurn);
+        // if (!burned) {
+        //     revert UsdrEngine_FailedToBurnUsdr(msg.sender, _amountUsdrToBurn);
+        // }
+        emit UsdrBurned(onBehalfOf, usdrFrom, _amountUsdrToBurn);
+        _revertIfHealthFactorIsBroken(onBehalfOf);
+    }
+
+    function _redeemCollateral(address _addressTokenCollateral, uint256 _amountCollateral, address from, address to)
+        private
+    {
+        // Remove the collateral from the user(from )
+        s_collateralDeposited[from][_addressTokenCollateral] -= _amountCollateral;
+        emit CollateralRedeemed(from, to, _addressTokenCollateral, _amountCollateral);
+        // Transfer the collateral to the user
+        bool success = ERC20(_addressTokenCollateral).transfer(to, _amountCollateral);
+        if (!success) {
+            revert UsdrEngine_FailedTransfer(from, to, _amountCollateral);
+        }
+    }
 
     function _getAccountInformationTotalUsdrAndCollateral(address user)
         internal
@@ -250,9 +393,7 @@ contract UsdrEngine is ReentrancyGuard {
 
         // $1000 ETH / $100 USDR = 10
         // $1000 ETH * 50 = $50000 ETH / 100 = 500 / 100 = 5 > 1
-        uint256 collateralAdjustedByThreshold =
-            (totalCollateralValueInUsdr * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
-        return (collateralAdjustedByThreshold * PRECISION) / totalUsdrMinted;
+        return _calculateHealthFactor(totalUsdrMinted, totalCollateralValueInUsdr);
     }
 
     function _revertIfHealthFactorIsBroken(address user) internal view {
@@ -265,12 +406,24 @@ contract UsdrEngine is ReentrancyGuard {
     }
 
     ////////////////////
-    // Public Functions
+    // Public and view Functions
     ////////////////////
 
-    /*
-    * @
+    function getTokenAmountFromUsdr(address token, uint256 usdrAmount) public view returns (uint256 amountToken) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeed[token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        // $100e18 USD Debt
+        // 1 ETH = 2000 USD
+        // 100e18 / 2000 = 50 ETH
+        return (usdrAmount * PRECISION) / (uint256(price) * ADDITIONAL_FEE_PRECISION);
+    }
 
+    /*
+        @notice follows CEI(check, effects, interactions)
+        @param: user The address of the user to get the collateral value for
+        @return: totalCollateralInUsdr
+        @notice Returns the total value of the collateral in usdr
+        @notice This function is called when the user wants to get the value of their collateral 
     */
     function getAccountCollateralValueInUsdr(address user) public view returns (uint256 totalCollateralInUsdr) {
         // loop through all the collateral the user has

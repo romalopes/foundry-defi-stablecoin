@@ -58,8 +58,8 @@ contract UsdrCoin is ERC20Burnable, Ownable {
         super.burn(_amount);
     }
 
-    function burnFromContract(uint256 amount) external onlyOwner {
-        _burn(address(this), amount);
+    function burnFromContract(address account, uint256 amount) external onlyOwner {
+        _burn(account, amount);
     }
 
     function mint(address _to, uint256 _amount) external onlyOwner returns (bool) {
