@@ -22,10 +22,6 @@ contract DeployUsdr is Script {
         ) = helperConfig.activeNetworkConfig();
 
         vm.startBroadcast(deployerKey);
-        // usdrCoin = new UsdrCoin(msg.sender);
-        // console.logAddress(address(this));
-        // console.logAddress(address(usdrCoin));
-        // console.logAddress(address(msg.sender));
         tokenAddresses.push(wethTokenAddress);
         tokenAddresses.push(wbtcTokenAddress);
         priceFeedAddresses.push(wethUsdPriceFeed);
@@ -36,4 +32,20 @@ contract DeployUsdr is Script {
         vm.stopBroadcast();
         return (usdrCoin, usdrEngine, helperConfig);
     }
+
+    // function run() external returns (DecentralizedStableCoin, DSCEngine, HelperConfig) {
+    //     HelperConfig helperConfig = new HelperConfig(); // This comes with our mocks!
+
+    //     (address wethUsdPriceFeed, address wbtcUsdPriceFeed, address weth, address wbtc, uint256 deployerKey) =
+    //         helperConfig.activeNetworkConfig();
+    //     tokenAddresses = [weth, wbtc];
+    //     priceFeedAddresses = [wethUsdPriceFeed, wbtcUsdPriceFeed];
+
+    //     vm.startBroadcast(deployerKey);
+    //     DecentralizedStableCoin dsc = new DecentralizedStableCoin();
+    //     DSCEngine dscEngine = new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc));
+    //     dsc.transferOwnership(address(dscEngine));
+    //     vm.stopBroadcast();
+    //     return (dsc, dscEngine, helperConfig);
+    // }
 }

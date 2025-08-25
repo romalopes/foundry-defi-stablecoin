@@ -7,6 +7,7 @@ import {UsdrEngine} from "src/UsdrEngine.sol";
 import {UsdrCoin} from "src/UsdrCoin.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
+import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {console} from "forge-std/console.sol";
 
 contract UsdrEngineTest is Test {
@@ -99,19 +100,30 @@ contract UsdrEngineTest is Test {
 
     function testRevertIfCollateralIsZero() public {
         vm.prank(user);
-        ERC20Mock(wethTokenAddress).approve(address(user), AMOUNT_COLLATERAL);
+        bool success = ERC20Mock(wethTokenAddress).approve(address(usdrEngine), AMOUNT_COLLATERAL);
+        require(success, "Approval failed");
         vm.expectRevert(abi.encodeWithSelector(UsdrEngine.UsdrEngine_ErrorAmountMustBeMoreThanZero.selector, 0));
         usdrEngine.depositCollateral(wethTokenAddress, 0);
         vm.stopPrank();
     }
 
-    // function testCollateralGreaterThanZeroSuccess() public {
-    //     vm.prank(user);
-    //     // console.log("owner:", UsdrCoin(wethTokenAddress).owner());
-    //     ERC20Mock(wethTokenAddress).approve(address(user), AMOUNT_COLLATERAL);
-    //     usdrEngine.depositCollateral(wethTokenAddress, AMOUNT_COLLATERAL);
-    //     vm.stopPrank();
-    // }
+    function testCollateralGreaterThanZeroSuccess() public {
+        console.log("msg.sender:", msg.sender);
+        vm.prank(user);
+        // console.log("owner:", UsdrCoin(wethTokenAddress).owner());
+        bool success = ERC20Mock(wethTokenAddress).approve(address(usdrEngine), AMOUNT_COLLATERAL);
+        require(success, "Approval failed");
+        console.log("address(usdrEngine):", address(usdrEngine));
+        console.log("address(this):", address(this));
+        console.log("allowance: ", ERC20Mock(wethTokenAddress).allowance(address(this), address(this)));
+        uint256 allowanceAmount = ERC20Mock(wethTokenAddress).allowance(
+            address(0x6CA6d1e2D5347Bfab1d91e883F1915560e09129D), address(usdrEngine)
+        );
+        console.log("allowanceAmount:", allowanceAmount);
+
+        usdrEngine.depositCollateral(wethTokenAddress, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
 
     function testGetTokenAmountFromUsd() public view {
         uint256 usdAmount = 100 ether; // usd
@@ -136,9 +148,9 @@ contract UsdrEngineTest is Test {
     //     ERC20Mock(wethTokenAddress).approve(address(usdrEngine), 100 ether);
     //     usdrEngine.depositCollateral(wethTokenAddress, AMOUNT_COLLATERAL);
     //     vm.stopPrank();
-    //     // assertEq(usdrCoin.balanceOf(user), AMOUNT);
-    //     // usdrEngine.depositCollateral(wbtcTokenAddress, AMOUNT);
-    //     // assertEq(usdrCoin.balanceOf(user), 2 * AMOUNT);
+    //     assertEq(usdrCoin.balanceOf(user), AMOUNT);
+    //     usdrEngine.depositCollateral(wbtcTokenAddress, AMOUNT);
+    //     assertEq(usdrCoin.balanceOf(user), 2 * AMOUNT);
     // }
 
     function testRevertWithUnapprovedCollateralAddress() public {
@@ -225,4 +237,3 @@ contract UsdrEngineTest is Test {
 }
 
 // uint256 startingUserHealthFactor, uint256 endingUserHealthFactor);
-gi
