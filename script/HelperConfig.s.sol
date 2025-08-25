@@ -3,7 +3,8 @@ pragma solidity ^0.8.19;
 
 import {Script} from "forge-std/Script.sol";
 import {MockV3Aggregator} from "../test/mocks/MockV3Aggregator.sol";
-import {ERC20Mock} from "lib/openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
+// import {ERC20Mock} from "lib/openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "../test/mocks/ERC20Mock.sol";
 
 contract HelperConfig is Script {
     // BTC/USD 0x85355da30ee4b35F4B30759Bd49a1EBE3fc41Bdb. 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
@@ -79,8 +80,8 @@ contract HelperConfig is Script {
         vm.startBroadcast();
         MockV3Aggregator ethPriceFeed = new MockV3Aggregator(DECIMALS, ETH_USD_PRICE);
         MockV3Aggregator btcPriceFeed = new MockV3Aggregator(DECIMALS, BTC_USD_PRICE);
-        ERC20Mock wethToken = new ERC20Mock(); //("WETH", "WETH");
-        ERC20Mock wbtcToken = new ERC20Mock(); //("WBTC", "WBTC");
+        ERC20Mock wethToken = new ERC20Mock("WETH", "WETH", msg.sender, 1000e8);
+        ERC20Mock wbtcToken = new ERC20Mock("WBTC", "WBTC", msg.sender, 1000e8);
         networkConfig.wethUsdPriceFeed = address(ethPriceFeed); //ethPriceFeed;
         networkConfig.wbtcUsdPriceFeed = address(btcPriceFeed); // btcPriceFeed;
         networkConfig.wethTokenAddress = address(wethToken); //wethToken;

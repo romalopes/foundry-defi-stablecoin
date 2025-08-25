@@ -31,6 +31,7 @@ import {ReentrancyGuard} from "lib/openzeppelin-contracts/contracts/utils/Reentr
 import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {AggregatorV3Interface} from
     "lib/chainlink-brownie-contracts/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {console} from "forge-std/console.sol";
 
 /*
  * @title DSCEngine
@@ -63,8 +64,8 @@ contract UsdrEngine is ReentrancyGuard {
     error UsdrEngine_HealthFactorIsLessThanOne(address, uint256);
     error UsdrEngine_FailedToMintUsdr(address, uint256);
     error UsdrEngine_FailedToBurnUsdr(address, uint256);
-    error UsdrEngine_HealthFactorTooHigh(address, uint256);
     error UsdrEngine_ErrorHealthFactorNotImproved(uint256 startingUserHealthFactor, uint256 endingUserHealthFactor);
+    error UsdrEngine_HealthFactorTooHigh(address, uint256);
     ////////////////////
     // State Variables
     ////////////////////
@@ -291,7 +292,7 @@ contract UsdrEngine is ReentrancyGuard {
         // _debtToCover == $100
         // If Eth == $2000.
         // 100 / 2000 == 0.05
-        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsdr(_addressTokenCollateral, _debtToCover);
+        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsd(_addressTokenCollateral, _debtToCover);
         // Give them 10% bonus for incentiving them to liquidate
         // So give the liquidator $110 in WETH for $100 in USDR
         // 0.05 ETH * 0.1 = 0.005 ETH
@@ -307,6 +308,15 @@ contract UsdrEngine is ReentrancyGuard {
             revert UsdrEngine_ErrorHealthFactorNotImproved(startingUserHealthFactor, endingUserHealthFactor);
         }
         _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
+    function getAccountInformation(address user)
+        external
+        view
+        returns (uint256 totalUsdrMinted, uint256 totalCollateralValueInUsdr)
+    {
+        (totalUsdrMinted, totalCollateralValueInUsdr) = _getAccountInformationTotalUsdrAndCollateral(user);
+        return (totalUsdrMinted, totalCollateralValueInUsdr);
     }
 
     ////////////////////
@@ -409,13 +419,13 @@ contract UsdrEngine is ReentrancyGuard {
     // Public and view Functions
     ////////////////////
 
-    function getTokenAmountFromUsdr(address token, uint256 usdrAmount) public view returns (uint256 amountToken) {
+    function getTokenAmountFromUsd(address token, uint256 usdAmount) public view returns (uint256 amountToken) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeed[token]);
         (, int256 price,,,) = priceFeed.latestRoundData();
         // $100e18 USD Debt
         // 1 ETH = 2000 USD
         // 100e18 / 2000 = 50 ETH
-        return (usdrAmount * PRECISION) / (uint256(price) * ADDITIONAL_FEE_PRECISION);
+        return (usdAmount * PRECISION) / (uint256(price) * ADDITIONAL_FEE_PRECISION);
     }
 
     /*
@@ -445,5 +455,9 @@ contract UsdrEngine is ReentrancyGuard {
         // Ex: 1 ETH = $1000
         // return value from ChainLink 1000 * 1e8 (eight decimals)
         return ((uint256(price) * ADDITIONAL_FEE_PRECISION) * amount) / PRECISION; //(1000 * 1e8 * 1e10) * 10 * 1e18
+    }
+
+    function getCollateralBalanceOfUser(address user, address token) external view returns (uint256) {
+        return s_collateralDeposited[user][token];
     }
 }
